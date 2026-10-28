@@ -253,6 +253,15 @@ details[open].lines summary::after{content:" ↑"}
 .login{display:flex;flex-direction:column;gap:14px;margin-top:8px}
 .login .card{display:flex;flex-direction:column;gap:2px}
 .pw{position:relative}
+.cherry .av{overflow:hidden;background:var(--butter);padding:0}
+.cherry .av img{width:100%;height:100%;object-fit:cover;display:block}
+.say img{width:36px;height:36px;border-radius:50%;flex:none;border:2px solid var(--ink);background:var(--butter);object-fit:cover}
+.lbl-row{display:flex;align-items:center;gap:8px;padding-right:90px}
+.lbl-row .lbl{padding-right:0}
+.eye{width:34px;height:34px;flex:none;border-radius:50%;border:1.5px solid currentColor;background:rgba(255,255,255,.16);color:inherit;display:grid;place-items:center;padding:0}
+.eye svg{width:18px;height:18px}
+.chipbtn{background:rgba(255,255,255,.16);color:inherit;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer}
+.cof-big{text-align:center;font-family:var(--display);font-size:40px;line-height:1.05;margin:6px 0 2px;font-variant-numeric:tabular-nums}
 .menu small{display:block;color:var(--muted);font-weight:600;font-size:12.5px}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -294,8 +303,9 @@ const MS = MES.map(m=>m.slice(0,3));
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const brl = c => (c < 0 ? '−' : '') + 'R$ ' + (Math.abs(c)/100).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
-const brl0 = c => (c < 0 ? '−' : '') + 'R$ ' + Math.round(Math.abs(c)/100).toLocaleString('pt-BR');
+const HIDDEN = 'R$ ••••';
+const brl = c => (S.hide && S.main) ? HIDDEN : (c < 0 ? '−' : '') + 'R$ ' + (Math.abs(c)/100).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+const brl0 = c => (S.hide && S.main) ? HIDDEN : (c < 0 ? '−' : '') + 'R$ ' + Math.round(Math.abs(c)/100).toLocaleString('pt-BR');
 const ym = (y,m) => y + '-' + String(m).padStart(2,'0');
 const idx = k => { const [y,m] = k.split('-').map(Number); return y*12 + m - 1; };
 const fromIdx = t => ym(Math.floor(t/12), t%12 + 1);
@@ -316,7 +326,8 @@ const catOf = k => ALLC[k] && ALLC[k].g !== 'inc' ? k : 'outros';
 const SUPABASE_URL = 'https://dgqtdexgozrlqmqfhdhi.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_CzXLIBogflZbd22P4iuupQ_K3BrRNxg';
 let sb = null;
-const S = { db:null, uid:null, demo:false, name:'', cfg:null, months:{}, view:curM, loaded:false };
+const S = { db:null, uid:null, demo:false, name:'', cfg:null, months:{}, cofre:{usos:[]}, view:curM, loaded:false, sheet:false, hide:false };
+try { S.hide = localStorage.getItem('cb-hide') === '1'; } catch(e){}
 const ready = c => c && c.v === 2 && c.renda > 0;
 
 /* ---------- plano sugerido (50% essenciais, guardar primeiro, resto estilo de vida) ---------- */
@@ -339,10 +350,10 @@ function suggest(renda, guardar, fixas){
 /* ---------- conta do mês ---------- */
 function allItems(){ return Object.values(S.months).flatMap(m => m.itens || []); }
 function month(M){
-  const c = S.cfg, r = {cat:{}, extras:0, spent:0, fixed:0, parcels:[], ess:0, life:0};
+  const c = S.cfg, r = {cat:{}, fixCat:{}, extras:0, spent:0, fixed:0, parcels:[], ess:0, life:0};
   for (const [k] of CAT) r.cat[k] = 0;
   if (!c) return Object.assign(r, {renda:0, G:0, base:0, livre:0, guardado:0});
-  for (const f of c.fixas || []) if (diffM(M, f.desde || c.inicio) >= 0){ const k = catOf(f.cat); r.cat[k] += f.v; r.fixed += f.v; }
+  for (const f of c.fixas || []) if (diffM(M, f.desde || c.inicio) >= 0){ const k = catOf(f.cat); r.cat[k] += f.v; r.fixCat[k] = (r.fixCat[k]||0) + f.v; r.fixed += f.v; }
   for (const it of allItems()){
     const k = diffM(M, monthOf(it.data));
     if (it.tipo === 'entrada'){ if (k === 0) r.extras += it.v; continue; }
@@ -389,11 +400,12 @@ function cherrySays(M, r){
   if (r.livre < 0) return fill(pick(['passamos do plano do mês em {livre} 🫠 respira, segura o cartão e vamos juntas até o fim.', 'o mês pediu mais do que tinha. sem drama: daqui pra frente é modo econômico 🍝'], 'over'), v);
   const payday = Math.min(c.dia || 5, r.D);
   if (r.G && r.guardado < r.G && r.d >= payday) return fill(pick(['o salário já caiu? então separa os {G} primeiro. pague-se primeiro, rainha 👑', 'antes de qualquer comprinha: já guardou seus {G}? o você do futuro agradece 💌', 'regra de ouro: guardar assim que o salário cai. bora separar os {G}? 🍒'], 'save'), v);
-  const over = CAT.filter(([k]) => c.orc[k] && r.cat[k] > c.orc[k]);
+  const vari = k => r.cat[k] - (r.fixCat[k]||0);
+  const over = CAT.filter(([k]) => c.orc[k] && r.cat[k] > c.orc[k] && vari(k) > 0);
   if (over.length){ const [k,n] = over[0]; const arr = CAT_OVER[k] || ['{cat} passou do limite em {x} 🫣 bora segurar esse aí?']; return fill(pick(arr, k), {...v, cat:n.toLowerCase(), x:brl0(r.cat[k]-c.orc[k])}); }
   const pace = r.varSpent / r.varBudget;
   if (pace > r.frac + .15) return fill(pick(['calma, amiga: você já usou {p}% do dinheiro livre com {q}% do mês. dá pra gastar {dia} por dia daqui pra frente 🚦', 'ritmo de black friday detectado 🛍️ pra fechar no azul, no máximo {dia} por dia até o fim do mês.'], 'fast'), {...v, p:Math.round(pace*100), q:Math.round(r.frac*100)});
-  const near = CAT.find(([k]) => c.orc[k] && r.cat[k] >= c.orc[k] * .8 && r.left > 7);
+  const near = CAT.find(([k]) => c.orc[k] && vari(k) > 0 && c.orc[k] > (r.fixCat[k]||0) && r.cat[k] >= c.orc[k] * .8 && r.left > 7);
   if (near) return fill(pick(['{cat} já tá em {p}% do limite e ainda faltam {n} dias. devagar com ele 👀', 'alerta fofo: {cat} quase no limite ({p}%). segura mais um pouquinho? 🫶'], near[0]), {...v, cat:near[1].toLowerCase(), p:Math.round(r.cat[near[0]]/c.orc[near[0]]*100)});
   if (r.left <= 3) return fill(pick(['reta final! segura mais {n} dias e sobram {livre} pra reforçar o cofrinho ✨', 'últimos dias do mês e você no azul 💙 que tal guardar o que sobrar?'], 'end'), v);
   if (!r.varSpent) return pick(['mês novinho em folha ✶ bora fazer ele render?', 'zero gastos até agora. tô orgulhosa, mas sei que o delivery tá te olhando 👀'], 'start');
@@ -427,7 +439,8 @@ function bar(g, L){
   const cls = !L ? 'free' : p > 1 ? 'over' : p >= .8 ? 'warn' : '';
   return {p, cls, w: L ? Math.min(100, p*100) : 100};
 }
-function render(){
+function render(){ S.main = true; try { renderMain(); } finally { S.main = false; } }
+function renderMain(){
   const app = $('#app');
   if (!S.loaded) return;
   if (S.block === 'login'){ $('#fab').hidden = true; return renderLogin(app); }
@@ -439,21 +452,21 @@ function render(){
     <button class="icon-btn" id="btnCfg" aria-label="Meu plano">⚙</button></header>`;
   if (S.demo) h += `<div class="banner">Modo exemplo: esses números são inventados e nada fica salvo.</div>`;
   if (!ready(c)){
-    h += `<div class="cherry"><div class="av"><svg aria-hidden="true"><use href="#cherry"/></svg></div><div class="bubble"><b>Cherry</b><p>oi! eu sou a Cherry, sua consultora financeira 🍒 me conta três coisinhas e eu monto seu plano do mês.</p></div></div>
+    h += `<div class="cherry"><div class="av"><img src="cherry.png" alt="Cherry"></div><div class="bubble"><b>Cherry</b><p>oi! eu sou a Cherry, sua consultora financeira 🍒 me conta três coisinhas e eu monto seu plano do mês.</p></div></div>
       <button class="cta" id="startPlan">montar meu plano ✶</button>`;
     app.innerHTML = h; $('#fab').hidden = true;
     $('#btnCfg').onclick = () => openPlan(0); $('#startPlan').onclick = () => openPlan(0);
     return;
   }
   h += `<nav class="months" aria-label="Mês"><button id="prevM" aria-label="Mês anterior">‹</button><strong>${mName(M)} ${M.slice(0,4)}</strong><button id="nextM" aria-label="Próximo mês">›</button></nav>`;
-  h += `<div class="cherry"><div class="av"><svg aria-hidden="true"><use href="#cherry"/></svg></div><div class="bubble"><b>Cherry</b><p>${esc(cherrySays(M, r))}</p></div></div>`;
+  h += `<div class="cherry"><div class="av"><img src="cherry.png" alt="Cherry"></div><div class="bubble"><b>Cherry</b><p>${esc(cherrySays(M, r))}</p></div></div>`;
 
   if (diffM(M, c.inicio) < 0){
     const its0 = ((S.months[M] || {}).itens || []);
     h += `<div class="card" style="text-align:center"><p class="big-note" style="margin-top:4px">seu plano começa em ${mName(c.inicio)} ✶</p>
       <p class="hint">Já sabe de algum gasto de ${mName(c.inicio)}, tipo uma compra parcelada? Pode lançar com a data de lá.</p>
       <button class="cta" id="goStart">ir pra ${mName(c.inicio)}</button></div>`;
-    if (its0.length) h += `<section><div class="sec-h"><h2>lançamentos de ${mName(M)}</h2><span>${its0.length}</span></div><p class="list-hint">Não contam no seu plano. Toca num pra apagar se quiser.</p><div class="card list">${its0.map(it => { const cat = ALLC[it.cat] || ALLC.outros; return `<button class="row" data-it="${it.id}"><span class="emo">${cat.e}</span><span class="t">${esc(it.desc || cat.n)}<span class="meta">${dShort(it.data)}</span></span><span class="a">${brl(it.v)}</span></button>`; }).join('')}</div></section>`;
+    if (its0.length) h += `<section><div class="sec-h"><h2>lançamentos de ${mName(M)}</h2><span>${its0.length}</span></div><p class="list-hint">Não contam no seu mês. Toca num pra apagar se quiser.</p><div class="card list">${its0.map(it => { const cat = ALLC[it.cat] || ALLC.outros; return `<button class="row" data-it="${it.id}"><span class="emo">${cat.e}</span><span class="t">${esc(it.desc || cat.n)}<span class="meta">${dShort(it.data)}</span></span><span class="a">${brl(it.v)}</span></button>`; }).join('')}</div></section>`;
     app.innerHTML = h; $('#fab').hidden = false;
     $('#btnCfg').onclick = openMenu;
     $('#prevM').onclick = () => { S.view = addM(S.view, -1); render(); };
@@ -465,11 +478,11 @@ function render(){
 
   // quanto ainda posso gastar
   const neg = r.livre < 0;
-  h += `<div class="hero"><div class="sticker ${neg?'neg':''}">${neg ? 'passou<br>🫠' : past ? 'sobrou<br>✶' : 'no<br>plano ✶'}</div>
-    <div class="lbl">${past ? 'sobrou em ' + mName(M) : neg ? 'passou do plano em' : 'ainda posso gastar'}</div>
+  h += `<div class="hero"><div class="sticker ${neg?'neg':''}">${neg ? 'passou<br>🫠' : past ? 'sobrou<br>✶' : 'tudo<br>certo ✶'}</div>
+    <div class="lbl-row"><div class="lbl">${past ? 'sobrou em ' + mName(M) : neg ? 'passou do total em' : 'ainda posso gastar'}</div><button class="eye" id="eye" aria-label="${S.hide ? 'Mostrar valores' : 'Esconder valores'}" aria-pressed="${S.hide}">${S.hide ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l18 18"/><path d="M10.6 5.1A10.4 10.4 0 0 1 12 5c6.4 0 10 7 10 7a17.6 17.6 0 0 1-3.2 4.1M6.6 6.6C3.9 8.4 2 12 2 12s3.6 7 10 7a9.7 9.7 0 0 0 4.4-1.1"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>' : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>'}</button></div>
     <div class="big">${brl(Math.abs(r.livre))}</div>
     ${isNow && !neg ? `<div class="sub">≈ ${brl(r.perDay)} por dia · ${r.left === 1 ? 'último dia do mês' : 'faltam ' + r.left + ' dias'}</div>` : ''}
-    <div class="split"><span class="chip">plano ${brl0(r.base)}</span><span class="chip">gastei ${brl0(r.spent)}</span>${r.extras ? `<span class="chip">extras +${brl0(r.extras)}</span>` : ''}</div>
+    <div class="split"><span class="chip">total do mês ${brl0(r.base)}</span><span class="chip">gastei ${brl0(r.spent)}</span><button class="chip chipbtn" id="cofreChip">🍒 cofrinho ${brl0(cofre().total)}</button>${r.extras ? `<span class="chip">extras +${brl0(r.extras)}</span>` : ''}</div>
   </div>`;
 
   // meta de guardar
@@ -480,6 +493,7 @@ function render(){
       <button class="pill-toggle ${done?'on':''}" id="saveBtn">${done ? 'guardei ✓' : 'guardei ✶'}</button></div>
       <div class="track" style="margin-top:12px"><div class="fill" style="width:${sp}%;background:var(--mint)"></div></div>
       ${!done ? `<p class="cap">Dica da Cherry: transfere pra uma conta separada ou caixinha assim que o salário cair.</p>` : ''}
+      <button class="link" id="cofreLink">🍒 tudo que você guardou vai pro cofrinho · ver</button>
     </div></section>`;
   }
 
@@ -546,19 +560,23 @@ function render(){
   $('#btnCfg').onclick = openMenu;
   $('#prevM').onclick = () => { S.view = addM(S.view, -1); render(); };
   $('#nextM').onclick = () => { S.view = addM(S.view, 1); render(); };
-  const sb = $('#saveBtn'); if (sb) sb.onclick = () => openSave(M);
+  const sbt = $('#saveBtn'); if (sbt) sbt.onclick = () => openSave(M);
+  $('#eye').onclick = () => { S.hide = !S.hide; try { localStorage.setItem('cb-hide', S.hide ? '1' : '0'); } catch(e){} render(); };
+  $('#cofreChip').onclick = openCofre;
+  const cl = $('#cofreLink'); if (cl) cl.onclick = openCofre;
   app.querySelectorAll('[data-fx]').forEach(b => b.onclick = () => { const m = monthDoc(M); m.pagas = {...(m.pagas||{})}; m.pagas[b.dataset.fx] = !m.pagas[b.dataset.fx]; render(); saveMonth(M); });
   app.querySelectorAll('[data-it]').forEach(b => b.onclick = () => openDetail(b.dataset.it));
 }
 
 /* ---------- sheets ---------- */
 function openSheet(html, after){
+  S.sheet = true;
   $('#sheetBody').innerHTML = html;
   $('#scrim').classList.add('show'); $('#sheet').classList.add('show');
   $('#sheet').scrollTop = 0;
   after && after();
 }
-function closeSheet(){ $('#scrim').classList.remove('show'); $('#sheet').classList.remove('show'); }
+function closeSheet(){ const was = S.sheet; S.sheet = false; $('#scrim').classList.remove('show'); $('#sheet').classList.remove('show'); if (was && S.hide && S.loaded && !S.block) render(); }
 $('#scrim').onclick = closeSheet;
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSheet(); });
 
@@ -568,7 +586,7 @@ function moneyInput(el, c0){
   el.addEventListener('input', () => { const d = el.value.replace(/\D/g,'').slice(0,11); set(+d || 0); });
 }
 const cents = el => +(el.dataset.c || 0);
-const sayBox = t => `<div class="say"><svg aria-hidden="true"><use href="#cherry"/></svg><span>${t}</span></div>`;
+const sayBox = t => `<div class="say"><img src="cherry.png" alt=""><span>${t}</span></div>`;
 
 function openMenu(){
   openSheet(`<h3>meu plano</h3><div class="menu">
@@ -588,7 +606,7 @@ function openMenu(){
 
 function renderLogin(app){
   app.innerHTML = `<header><svg class="logo" aria-hidden="true"><use href="#cherry"/></svg><div class="hello"><small>cherry bank</small><h1>oi ✶</h1></div></header>
-    <div class="cherry"><div class="av"><svg aria-hidden="true"><use href="#cherry"/></svg></div><div class="bubble"><b>Cherry</b><p>oi! eu sou a Cherry, sua consultora financeira 🍒 entra com o e-mail e a senha que você recebeu.</p></div></div>
+    <div class="cherry"><div class="av"><img src="cherry.png" alt="Cherry"></div><div class="bubble"><b>Cherry</b><p>oi! eu sou a Cherry, sua consultora financeira 🍒 entra com o e-mail e a senha que você recebeu.</p></div></div>
     <form class="login" id="loginForm" novalidate><div class="card">
       <div class="field" style="margin-top:0"><label for="lEmail">e-mail</label><input id="lEmail" type="email" autocomplete="username" inputmode="email" autocapitalize="off" required></div>
       <div class="field"><label for="lPass">senha</label><input id="lPass" type="password" autocomplete="current-password" required></div>
@@ -614,7 +632,7 @@ function renderLogin(app){
 
 async function logout(){
   try { await sb.auth.signOut(); } catch(e){}
-  S.uid = null; S.cfg = null; S.months = {}; S.block = 'login'; S.loaded = true; closeSheet(); render();
+  S.uid = null; S.cfg = null; S.months = {}; S.cofre = {usos:[]}; S.block = 'login'; S.loaded = true; closeSheet(); render();
 }
 
 function openPassword(){
@@ -638,13 +656,14 @@ function openPassword(){
 async function loadAll(){
   const { data, error } = await sb.from('docs').select('id,data');
   if (error) throw error;
-  let cfg = null; const months = {};
+  let cfg = null; const months = {}; let cof = {usos:[]};
   for (const row of data || []){
     const b = row.data || {};
     if (row.id === 'config') cfg = b;
+    else if (row.id === 'cofre') cof = {usos:[...(b.usos||[])]};
     else if (row.id.startsWith('m-')) months[row.id.slice(2)] = {itens:[...(b.itens||[])], pagas:{...(b.pagas||{})}, guardado:b.guardado||0};
   }
-  S.months = months; S.cfg = cfg ? {...cfg, fixas:[...(cfg.fixas||[])], orc:{...(cfg.orc||{})}} : null;
+  S.cofre = cof; S.months = months; S.cfg = cfg ? {...cfg, fixas:[...(cfg.fixas||[])], orc:{...(cfg.orc||{})}} : null;
 }
 
 async function startSession(user){
@@ -655,6 +674,7 @@ async function startSession(user){
   if (S.cfg && S.cfg.inicio && diffM(S.view, S.cfg.inicio) < 0) S.view = S.cfg.inicio;
   render();
   if (!ready(S.cfg)) setTimeout(() => { if (!$('#sheet').classList.contains('show')) openPlan(0); }, 400);
+  else maybeResumo();
 }
 
 /* assistente de plano: 0 salário · 1 guardar · 2 fixas · 3 limites */
@@ -769,9 +789,89 @@ function openSave(M){
       moneyInput($('#amt'), r.guardado || r.G);
       $('#cls').onclick = closeSheet;
       $('#ok').onclick = () => {
+        const before = cofre().total;
         const v = cents($('#amt')), m = monthDoc(M); m.guardado = v; saveMonth(M); closeSheet(); render();
-        if (v >= r.G && r.G){ toast('meta batida, rainha 👑'); confetti(); } else toast(v ? 'cada real conta 💌' : 'salvo');
+        const after = cofre().total, mk = Math.floor(after / 100000);
+        if (mk > Math.floor(before / 100000) && mk > 0){ toast(`cofrinho passou de ${brl0(mk * 100000)}! 🎉`); confetti(); }
+        else if (v >= r.G && r.G){ toast('meta batida, rainha 👑'); confetti(); } else toast(v ? 'cada real conta 💌' : 'salvo');
       };
+    });
+}
+
+
+/* ---------- cofrinho: soma tudo que foi guardado, menos o que foi usado ---------- */
+function cofre(){
+  const meses = Object.entries(S.months).filter(([, m]) => m.guardado > 0).sort((a, b) => b[0].localeCompare(a[0]));
+  const guardado = meses.reduce((s, [, m]) => s + m.guardado, 0);
+  const usos = (S.cofre && S.cofre.usos) || [];
+  const usado = usos.reduce((s, u) => s + u.v, 0);
+  return {total: guardado - usado, guardado, usado, meses, usos};
+}
+function saveCofre(){ return persist('cofre', {usos:(S.cofre && S.cofre.usos) || []}); }
+
+function openCofre(){
+  const cf = cofre();
+  const say = cf.total > 0
+    ? (cf.meses.length > 1 ? `Esse é todo o dinheiro que você já guardou comigo em ${cf.meses.length} meses. Olha ele crescendo! ✨` : 'Esse é todo o dinheiro que você já guardou comigo. Que comecem os depósitos! ✨')
+    : 'Seu cofrinho tá esperando o primeiro depósito. Quando guardar, toca em "guardei" que ele cresce aqui 💌';
+  const lines = [
+    ...cf.meses.map(([k, m]) => ({k, t:`${mName(k)} ${k.slice(0,4)}`, v:m.guardado})),
+    ...cf.usos.map(u => ({k:u.data, t:`usei um pouquinho${u.desc ? ' · ' + esc(u.desc) : ''} · ${dShort(u.data)}`, v:-u.v}))
+  ].sort((a, b) => b.k.localeCompare(a.k));
+  openSheet(`<h3>🍒 cofrinho</h3>${sayBox(say)}
+    <div class="cof-big">${brl(cf.total)}</div>
+    <p class="hint" style="text-align:center">tudo que você já guardou</p>
+    ${lines.length ? `<div class="foot-sum">${lines.map(l => `<div><span>${l.t}</span><b>${l.v < 0 ? '−' + brl(-l.v) : '+' + brl(l.v)}</b></div>`).join('')}</div>` : ''}
+    <button class="ghost" id="cls" style="margin-top:16px">fechar</button>
+    ${cf.total > 0 ? '<div style="text-align:center"><button class="link" id="use">usei um pouquinho</button></div>' : ''}`, () => {
+      $('#cls').onclick = closeSheet;
+      const u = $('#use'); if (u) u.onclick = () => openUse(cf.total);
+    });
+}
+
+function openUse(total){
+  openSheet(`<h3>usei um pouquinho</h3>${sayBox('Tudo bem! Reserva existe pra isso mesmo 💗 Quanto você tirou do cofrinho?')}
+    <div class="amount-wrap"><input class="amount" id="amt" inputmode="numeric" placeholder="0,00" aria-label="Valor usado do cofrinho"></div>
+    <div class="field"><label for="uDesc">pra quê? (opcional)</label><input id="uDesc" maxlength="40" placeholder="ex: conserto do celular"></div>
+    <div class="err" id="err"></div>
+    <button class="cta" id="ok">confirmar</button><button class="ghost" id="back">voltar</button>`, () => {
+      moneyInput($('#amt'), 0);
+      $('#back').onclick = openCofre;
+      $('#ok').onclick = () => {
+        const v = cents($('#amt'));
+        if (!v){ $('#err').textContent = 'Coloca quanto você usou.'; return; }
+        if (v > total){ $('#err').textContent = `Seu cofrinho tem ${brl(total)}.`; return; }
+        S.cofre = {usos:[...((S.cofre && S.cofre.usos) || []), {id:rid(), v, data:today, desc:$('#uDesc').value.trim()}]};
+        saveCofre(); closeSheet(); render(); toast('reserva é pra isso mesmo 💗');
+      };
+    });
+}
+
+/* ---------- resumo do mês: aparece uma vez, no primeiro acesso do mês novo ---------- */
+function maybeResumo(){
+  const c = S.cfg; if (!ready(c) || S.demo) return;
+  const P = addM(curM, -1);
+  if (diffM(P, c.inicio) < 0 || c.resumo === curM) return;
+  setTimeout(() => { if (!$('#sheet').classList.contains('show')) openResumo(P); }, 500);
+}
+function openResumo(P){
+  const c = S.cfg, r = month(P);
+  const vv = k => r.cat[k] - (r.fixCat[k]||0);
+  const top = CAT.filter(([k]) => vv(k) > 0).sort((a, b) => vv(b[0]) - vv(a[0]))[0];
+  const P2 = addM(P, -1), r2 = diffM(P2, c.inicio) >= 0 ? month(P2) : null;
+  const say = r.livre >= 0 ? `${mName(P)} fechou no azul e sobrou ${brl0(r.livre)}! ✨ bora com tudo em ${mName(curM)}?` : `${mName(P)} passou ${brl0(-r.livre)} do total do mês. sem drama: ${mName(curM)} é página nova 🍒`;
+  let comp = '';
+  if (r2){ const d = r.spent - r2.spent; comp = d < 0 ? `${brl0(-d)} a menos que em ${mName(P2)} 💪` : d > 0 ? `${brl0(d)} a mais que em ${mName(P2)}` : `igualzinho a ${mName(P2)}`; }
+  c.resumo = curM; saveCfg();
+  openSheet(`<h3>resumo de ${mName(P)} ✶</h3>${sayBox(say)}
+    <div class="foot-sum" style="font-size:14.5px;gap:10px">
+      <div><span>💌 guardou</span><b>${brl0(r.guardado)}</b></div>
+      <div><span>${top ? top[2] + ' mais gastou com ' + top[1].toLowerCase() : '🧾 gastos'}</span><b>${top ? brl0(vv(top[0])) : brl0(0)}</b></div>
+      <div><span>📊 gastou no mês</span><b>${brl0(r.spent)}</b></div>
+      ${comp ? `<div><span>↕️ comparado ao mês anterior</span><b>${comp}</b></div>` : ''}
+    </div>
+    <button class="cta" id="ok">bora pra ${mName(curM)} ✶</button>`, () => {
+      $('#ok').onclick = () => { closeSheet(); confetti(); };
     });
 }
 
