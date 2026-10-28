@@ -261,6 +261,14 @@ details[open].lines summary::after{content:" ↑"}
 .eye{width:34px;height:34px;flex:none;border-radius:50%;border:1.5px solid currentColor;background:rgba(255,255,255,.16);color:inherit;display:grid;place-items:center;padding:0}
 .eye svg{width:18px;height:18px}
 .chipbtn{background:rgba(255,255,255,.16);color:inherit;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer}
+.trio{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:12px}
+.trio>*{border:1.5px solid currentColor;border-radius:14px;padding:6px 7px;min-width:0;background:rgba(255,255,255,.12);color:inherit;font:inherit;text-align:left;margin:0}
+.trio span{display:block;font-size:11.5px;font-weight:700;letter-spacing:0;opacity:.9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.trio b{display:block;font-family:var(--mono);font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+.trio button{cursor:pointer}
+.trio i{font-style:normal}
+@media (max-width:370px){.trio .wide{display:none}}
+.extra-note{font-size:12.5px;font-weight:700;margin-top:8px;opacity:.95}
 .cof-big{text-align:center;font-family:var(--display);font-size:40px;line-height:1.05;margin:6px 0 2px;font-variant-numeric:tabular-nums}
 .menu small{display:block;color:var(--muted);font-weight:600;font-size:12.5px}
 </style>
@@ -482,7 +490,7 @@ function renderMain(){
     <div class="lbl-row"><div class="lbl">${past ? 'sobrou em ' + mName(M) : neg ? 'passou do total em' : 'ainda posso gastar'}</div><button class="eye" id="eye" aria-label="${S.hide ? 'Mostrar valores' : 'Esconder valores'}" aria-pressed="${S.hide}">${S.hide ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l18 18"/><path d="M10.6 5.1A10.4 10.4 0 0 1 12 5c6.4 0 10 7 10 7a17.6 17.6 0 0 1-3.2 4.1M6.6 6.6C3.9 8.4 2 12 2 12s3.6 7 10 7a9.7 9.7 0 0 0 4.4-1.1"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>' : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>'}</button></div>
     <div class="big">${brl(Math.abs(r.livre))}</div>
     ${isNow && !neg ? `<div class="sub">≈ ${brl(r.perDay)} por dia · ${r.left === 1 ? 'último dia do mês' : 'faltam ' + r.left + ' dias'}</div>` : ''}
-    <div class="split"><span class="chip">total do mês ${brl0(r.base)}</span><span class="chip">gastei ${brl0(r.spent)}</span><button class="chip chipbtn" id="cofreChip">🍒 cofrinho ${brl0(cofre().total)}</button>${r.extras ? `<span class="chip">extras +${brl0(r.extras)}</span>` : ''}</div>
+    <div class="trio"><div><span>total<i class="wide"> do mês</i></span><b>${brl0(r.base)}</b></div><div><span>gastei</span><b>${brl0(r.spent)}</b></div><button id="cofreChip" aria-label="Abrir cofrinho"><span>cofrinho ›</span><b>${brl0(cofre().total)}</b></button></div>${r.extras ? `<div class="extra-note">+ ${brl0(r.extras)} de extras esse mês ✶</div>` : ''}
   </div>`;
 
   // meta de guardar
